@@ -10,11 +10,12 @@ from analysis.charts import generate_chart
 from bot.formatters import (
     format_analysis,
     format_portfolio,
+    format_overview,
     format_trade,
     format_watchlist,
     format_help,
 )
-from config import MAX_WATCHLIST_SIZE
+from config import MAX_WATCHLIST_SIZE, VIRTUAL_CASH
 from data.market import MarketData
 from portfolio.manager import PortfolioManager
 from storage.database import Database
@@ -141,6 +142,55 @@ async def portfolio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception("Error fetching portfolio")
         await update.message.reply_text("Failed to load portfolio. Please try again.")
+
+
+async def overview_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db, _, portfolio_mgr = _get_deps(context)
+    user_id = update.effective_chat.id
+    await db.ensure_user(user_id)
+
+    try:
+        summary = await portfolio_mgr.get_summary(user_id)
+        trades = await db.get_trades(user_id)
+        text = format_overview(summary, trades, VIRTUAL_CASH)
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    except Exception:
+        logger.exception("Error fetching overview")
+        await update.message.reply_text("Failed to load overview. Please try again.")
+
+
+async def dashboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db, _, portfolio_mgr = _get_deps(context)
+    user_id = update.effective_chat.id
+    await db.ensure_user(user_id)
+
+    status_msg = await update.message.reply_text("Generating dashboard... ⏳")
+
+    try:
+        summary = await portfolio_mgr.get_summary(user_id)
+        snapshots = await db.get_snapshots(user_id)
+
+        from portfolio.charts import generate_dashboard
+        chart_buf = generate_dashboard(summary, snapshots, VIRTUAL_CASH)
+
+        # Build caption
+        total_return = summary.total_value - VIRTUAL_CASH
+        ret_sign = "+" if total_return >= 0 else ""
+        ret_pct = (total_return / VIRTUAL_CASH * 100) if VIRTUAL_CASH > 0 else 0
+        caption = (
+            f"<b>Portfolio Dashboard</b>\n"
+            f"Value: ${summary.total_value:,.2f} | "
+            f"Return: {ret_sign}${total_return:,.2f} ({ret_sign}{ret_pct:.1f}%)\n"
+            f"Positions: {len(summary.positions)} | Cash: ${summary.cash:,.2f}"
+        )
+
+        await update.message.reply_photo(
+            photo=chart_buf, caption=caption, parse_mode=ParseMode.HTML
+        )
+        await status_msg.delete()
+    except Exception:
+        logger.exception("Error generating dashboard")
+        await status_msg.edit_text("Failed to generate dashboard. Please try again.")
 
 
 async def buy_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

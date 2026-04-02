@@ -9,6 +9,7 @@ from analysis.signals import generate_signal
 from bot.formatters import format_alert
 from config import MARKET_OPEN_HOUR, MARKET_OPEN_MINUTE, MARKET_CLOSE_HOUR, MARKET_CLOSE_MINUTE
 from data.market import MarketData
+from portfolio.manager import PortfolioManager
 from storage.database import Database
 from telegram.constants import ParseMode
 
@@ -82,3 +83,20 @@ async def scan_watchlists(context: ContextTypes.DEFAULT_TYPE):
                     )
         except Exception as e:
             logger.warning(f"Failed to send alerts to user {user_id}: {e}")
+
+
+async def record_portfolio_snapshots(context: ContextTypes.DEFAULT_TYPE):
+    if not is_market_hours():
+        return
+
+    db: Database = context.bot_data["db"]
+    portfolio_mgr: PortfolioManager = context.bot_data["portfolio"]
+
+    user_ids = await db.get_all_user_ids()
+    for user_id in user_ids:
+        try:
+            summary = await portfolio_mgr.get_summary(user_id)
+            positions_value = sum(p.market_value for p in summary.positions)
+            await db.record_snapshot(user_id, summary.total_value, summary.cash, positions_value)
+        except Exception as e:
+            logger.warning(f"Failed to record snapshot for user {user_id}: {e}")

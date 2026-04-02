@@ -10,6 +10,8 @@ from bot.handlers import (
     watch_handler,
     unwatch_handler,
     portfolio_handler,
+    overview_handler,
+    dashboard_handler,
     buy_handler,
     sell_handler,
     alerts_handler,
@@ -19,7 +21,7 @@ from bot.handlers import (
 from config import TELEGRAM_BOT_TOKEN, LOG_LEVEL, SCAN_INTERVAL_MINUTES
 from data.market import MarketData
 from portfolio.manager import PortfolioManager
-from scheduler.jobs import scan_watchlists
+from scheduler.jobs import scan_watchlists, record_portfolio_snapshots
 from storage.database import Database
 
 
@@ -53,6 +55,8 @@ def main():
     app.add_handler(CommandHandler("watch", watch_handler))
     app.add_handler(CommandHandler("unwatch", unwatch_handler))
     app.add_handler(CommandHandler("portfolio", portfolio_handler))
+    app.add_handler(CommandHandler("overview", overview_handler))
+    app.add_handler(CommandHandler("dashboard", dashboard_handler))
     app.add_handler(CommandHandler("buy", buy_handler))
     app.add_handler(CommandHandler("sell", sell_handler))
     app.add_handler(CommandHandler("alerts", alerts_handler))
@@ -70,6 +74,13 @@ def main():
             first=30,
         )
         logger.info(f"Watchlist scanner scheduled every {SCAN_INTERVAL_MINUTES} minutes")
+
+        application.job_queue.run_repeating(
+            record_portfolio_snapshots,
+            interval=SCAN_INTERVAL_MINUTES * 60,
+            first=60,
+        )
+        logger.info("Portfolio snapshot recorder scheduled")
 
     app.post_init = post_init
 

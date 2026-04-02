@@ -50,6 +50,18 @@ class Database:
                 alert_enabled INTEGER DEFAULT 1,
                 alert_threshold TEXT DEFAULT 'strong_buy,strong_sell'
             );
+
+            CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                total_value REAL NOT NULL,
+                cash REAL NOT NULL,
+                positions_value REAL NOT NULL,
+                recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_snapshots_user_time
+                ON portfolio_snapshots (user_id, recorded_at);
         """)
         await self._db.commit()
 
@@ -194,6 +206,41 @@ class Database:
             (user_id, ticker.upper(), side, shares, price, total),
         )
         await self._db.commit()
+
+    # --- Portfolio Snapshots ---
+
+    async def record_snapshot(
+        self, user_id: int, total_value: float, cash: float, positions_value: float
+    ):
+        await self._db.execute(
+            "INSERT INTO portfolio_snapshots (user_id, total_value, cash, positions_value) VALUES (?, ?, ?, ?)",
+            (user_id, total_value, cash, positions_value),
+        )
+        await self._db.commit()
+
+    async def get_snapshots(self, user_id: int, limit: int = 90) -> list[dict]:
+        async with self._db.execute(
+            "SELECT total_value, cash, positions_value, recorded_at "
+            "FROM portfolio_snapshots WHERE user_id = ? ORDER BY recorded_at DESC LIMIT ?",
+            (user_id, limit),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "total_value": r["total_value"],
+                    "cash": r["cash"],
+                    "positions_value": r["positions_value"],
+                    "recorded_at": r["recorded_at"],
+                }
+                for r in reversed(rows)
+            ]
+
+    async def get_all_user_ids(self) -> list[int]:
+        async with self._db.execute("SELECT user_id FROM user_settings") as cursor:
+            rows = await cursor.fetchall()
+            return [r["user_id"] for r in rows]
+
+    # --- Trades ---
 
     async def get_trades(self, user_id: int, ticker: str | None = None) -> list[dict]:
         if ticker:

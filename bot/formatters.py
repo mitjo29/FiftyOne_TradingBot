@@ -97,6 +97,68 @@ def format_alert(signal: SignalResult) -> str:
     )
 
 
+def format_overview(summary: PortfolioSummary, trades: list[dict], initial_cash: float) -> str:
+    total_return = summary.total_value - initial_cash
+    total_return_pct = (total_return / initial_cash * 100) if initial_cash > 0 else 0
+    ret_sign = "+" if total_return >= 0 else ""
+
+    lines = [
+        "<b>Portfolio Overview</b>",
+        "",
+        f"Total Value:  <b>${summary.total_value:,.2f}</b>",
+        f"Cash:         ${summary.cash:,.2f}",
+        f"Invested:     ${summary.total_invested:,.2f}",
+        f"Total Return: <b>{ret_sign}${total_return:,.2f} ({ret_sign}{total_return_pct:.1f}%)</b>",
+        "",
+    ]
+
+    # Allocation breakdown
+    if summary.positions:
+        lines.append("<b>Allocation:</b>")
+        total = summary.total_value
+        for p in sorted(summary.positions, key=lambda x: x.market_value, reverse=True):
+            pct = (p.market_value / total * 100) if total > 0 else 0
+            bar = _alloc_bar(pct)
+            lines.append(f"  {p.ticker}: {bar} {pct:.1f}% (${p.market_value:,.0f})")
+
+        if summary.cash > 0:
+            cash_pct = (summary.cash / total * 100) if total > 0 else 0
+            bar = _alloc_bar(cash_pct)
+            lines.append(f"  Cash: {bar} {cash_pct:.1f}% (${summary.cash:,.0f})")
+
+        # Top / worst performers
+        lines.append("")
+        sorted_by_pnl = sorted(summary.positions, key=lambda x: x.pnl_pct, reverse=True)
+        if sorted_by_pnl:
+            best = sorted_by_pnl[0]
+            worst = sorted_by_pnl[-1]
+            lines.append(
+                f"Best:  <b>{best.ticker}</b> {'+' if best.pnl_pct >= 0 else ''}{best.pnl_pct:.1f}%"
+            )
+            if len(sorted_by_pnl) > 1:
+                lines.append(
+                    f"Worst: <b>{worst.ticker}</b> {'+' if worst.pnl_pct >= 0 else ''}{worst.pnl_pct:.1f}%"
+                )
+
+    # Recent trades
+    if trades:
+        lines.append("")
+        lines.append("<b>Recent Trades:</b>")
+        for t in trades[:5]:
+            emoji = "B" if t["side"] == "BUY" else "S"
+            lines.append(
+                f"  [{emoji}] {t['ticker']} {t['shares']:.2f} @ ${t['price']:.2f} = ${t['total']:,.2f}"
+            )
+
+    return "\n".join(lines)
+
+
+def _alloc_bar(pct: float) -> str:
+    filled = int(pct / 10)
+    filled = max(0, min(10, filled))
+    return "█" * filled + "░" * (10 - filled)
+
+
 def format_help() -> str:
     return (
         "<b>FiftyOne Trading Bot</b>\n\n"
@@ -108,6 +170,8 @@ def format_help() -> str:
         "  /unwatch &lt;TICKER&gt; - Remove from watchlist\n\n"
         "<b>Portfolio:</b>\n"
         "  /portfolio - View portfolio &amp; P&amp;L\n"
+        "  /overview - Detailed portfolio overview\n"
+        "  /dashboard - Visual performance dashboard\n"
         "  /buy &lt;TICKER&gt; &lt;$AMOUNT&gt; - Paper buy\n"
         "  /sell &lt;TICKER&gt; &lt;$AMOUNT&gt; - Paper sell\n\n"
         "<b>Settings:</b>\n"
