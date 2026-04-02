@@ -27,9 +27,7 @@ from config import DB_PATH, VIRTUAL_CASH
 from storage.database import Database
 from data.market import MarketData
 from portfolio.manager import PortfolioManager
-from analysis.indicators import compute_all
-from analysis.signals import generate_signal
-from analysis.charts import generate_chart
+from analysis.pipeline import run_full_analysis
 from portfolio.charts import generate_dashboard
 from bot.formatters import format_overview
 
@@ -63,8 +61,10 @@ async def lifespan(server: FastMCP):
 mcp = FastMCP(
     "FiftyOne Trading Bot",
     instructions=(
-        "A stock trading assistant with technical analysis (RSI, MACD, Moving Averages, "
-        "Bollinger Bands), virtual portfolio management, and watchlist tracking. "
+        "A stock trading assistant with advanced analysis: 6 technical indicators "
+        "(RSI, MACD, Moving Averages, Bollinger Bands, OBV Volume, Stochastic), "
+        "news sentiment scoring, and ML-based price prediction (GradientBoosting). "
+        "Includes Fibonacci retracement levels and ATR volatility. "
         "All trades are paper trading with virtual cash. Use the tools to analyze stocks, "
         "execute trades, and monitor portfolio performance."
     ),
@@ -79,10 +79,11 @@ mcp = FastMCP(
 
 @mcp.tool()
 async def analyze_stock(ticker: str) -> str:
-    """Run full technical analysis on a stock.
+    """Run full technical analysis on a stock with 8 indicators + sentiment + ML.
 
-    Returns RSI, MACD, Moving Averages, Bollinger Bands indicators
-    and an overall signal (Strong Buy / Buy / Hold / Sell / Strong Sell)
+    Returns RSI, MACD, Moving Averages, Bollinger Bands, OBV Volume,
+    Stochastic Oscillator, News Sentiment, and ML Price Prediction.
+    Overall signal: Strong Buy / Buy / Hold / Sell / Strong Sell
     with a score from -2.0 to +2.0.
 
     Args:
@@ -91,26 +92,29 @@ async def analyze_stock(ticker: str) -> str:
     ctx = mcp.get_context()
     market: MarketData = ctx["market"]
 
-    ticker = ticker.upper()
-    df = await market.get_stock_data(ticker)
-    indicators = compute_all(df)
-    signal = generate_signal(ticker, df, indicators)
+    signal, _, _ = await run_full_analysis(market, ticker)
 
     details = []
     for key, data in signal.details.items():
-        details.append(f"  {key.upper()}: score={data['score']}, {data['detail']}")
+        weight_pct = data.get("weight", 0) * 100
+        details.append(f"  {key.upper()} ({weight_pct:.0f}%): score={data['score']}, {data['detail']}")
 
-    return (
+    text = (
         f"=== Analysis: {signal.ticker} ===\n"
         f"Price: ${signal.current_price:.2f}\n"
-        f"Signal: {signal.overall_signal} (score: {signal.score:+.2f})\n\n"
-        f"Indicators:\n" + "\n".join(details)
+        f"Signal: {signal.overall_signal} (score: {signal.score:+.2f})\n"
     )
+    if signal.ml_probability is not None:
+        text += f"ML Prediction: {signal.ml_probability:.0%} up probability\n"
+    text += f"\nIndicators:\n" + "\n".join(details)
+    return text
 
 
 @mcp.tool()
 async def analyze_stock_with_chart(ticker: str) -> list:
-    """Run full technical analysis and return results with a chart image.
+    """Run full technical analysis with chart (Price+Fibonacci, RSI, Stochastic, Volume/OBV).
+
+    Includes 8 indicators, news sentiment, and ML price prediction.
 
     Args:
         ticker: Stock ticker symbol (e.g. AAPL, TSLA, MSFT)
@@ -120,22 +124,21 @@ async def analyze_stock_with_chart(ticker: str) -> list:
     ctx = mcp.get_context()
     market: MarketData = ctx["market"]
 
-    ticker = ticker.upper()
-    df = await market.get_stock_data(ticker)
-    indicators = compute_all(df)
-    signal = generate_signal(ticker, df, indicators)
-    chart_buf = generate_chart(ticker, df, indicators, signal)
+    signal, chart_buf, _ = await run_full_analysis(market, ticker)
 
     details = []
     for key, data in signal.details.items():
-        details.append(f"  {key.upper()}: score={data['score']}, {data['detail']}")
+        weight_pct = data.get("weight", 0) * 100
+        details.append(f"  {key.upper()} ({weight_pct:.0f}%): score={data['score']}, {data['detail']}")
 
     text = (
         f"=== Analysis: {signal.ticker} ===\n"
         f"Price: ${signal.current_price:.2f}\n"
-        f"Signal: {signal.overall_signal} (score: {signal.score:+.2f})\n\n"
-        f"Indicators:\n" + "\n".join(details)
+        f"Signal: {signal.overall_signal} (score: {signal.score:+.2f})\n"
     )
+    if signal.ml_probability is not None:
+        text += f"ML Prediction: {signal.ml_probability:.0%} up probability\n"
+    text += f"\nIndicators:\n" + "\n".join(details)
 
     chart_b64 = base64.b64encode(chart_buf.getvalue()).decode("utf-8")
 

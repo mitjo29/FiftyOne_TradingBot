@@ -3,10 +3,7 @@
 import json
 import logging
 
-from analysis.indicators import compute_all
-from analysis.signals import generate_signal
-from analysis.charts import generate_chart
-from bot.formatters import format_analysis
+from analysis.pipeline import run_full_analysis
 from data.market import MarketData
 from portfolio.manager import PortfolioManager
 from storage.database import Database
@@ -35,22 +32,21 @@ class ToolExecutor:
 
     async def _tool_analyze_stock(self, inputs: dict, user_id: int) -> dict:
         ticker = inputs["ticker"].upper()
-        df = await self.market.get_stock_data(ticker)
-        indicators = compute_all(df)
-        signal = generate_signal(ticker, df, indicators)
-        chart_buf = generate_chart(ticker, df, indicators, signal)
+        signal, chart_buf, _ = await run_full_analysis(self.market, ticker)
 
-        # Build a structured text result for Claude to interpret
         details = []
         for key, data in signal.details.items():
-            details.append(f"  {key.upper()}: score={data['score']}, {data['detail']}")
+            weight_pct = data.get("weight", 0) * 100
+            details.append(f"  {key.upper()} ({weight_pct:.0f}%): score={data['score']}, {data['detail']}")
 
         text = (
             f"Analysis for {signal.ticker}:\n"
             f"Price: ${signal.current_price:.2f}\n"
             f"Signal: {signal.overall_signal} (score: {signal.score:+.2f})\n"
-            f"Indicators:\n" + "\n".join(details)
         )
+        if signal.ml_probability is not None:
+            text += f"ML Prediction: {signal.ml_probability:.0%} up probability\n"
+        text += f"Indicators:\n" + "\n".join(details)
         return {"text": text, "chart": chart_buf}
 
     async def _tool_buy_stock(self, inputs: dict, user_id: int) -> dict:

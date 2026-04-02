@@ -4,9 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-from analysis.indicators import compute_all
-from analysis.signals import generate_signal
-from analysis.charts import generate_chart
+from analysis.pipeline import run_full_analysis
 from bot.formatters import (
     format_analysis,
     format_portfolio,
@@ -68,11 +66,7 @@ async def analyze_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_msg = await update.message.reply_text(f"Analyzing {ticker}... ⏳")
 
     try:
-        df = await market.get_stock_data(ticker)
-        indicators = compute_all(df)
-        signal = generate_signal(ticker, df, indicators)
-
-        chart_buf = generate_chart(ticker, df, indicators, signal)
+        signal, chart_buf, _ = await run_full_analysis(market, ticker)
         text = format_analysis(signal)
 
         await update.message.reply_photo(photo=chart_buf, caption=text, parse_mode=ParseMode.HTML)

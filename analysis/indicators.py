@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import talib
 
@@ -41,11 +42,69 @@ def compute_bollinger_bands(df: pd.DataFrame, period: int = 20, std: float = 2.0
     }
 
 
+def compute_obv(df: pd.DataFrame) -> pd.Series:
+    return pd.Series(
+        talib.OBV(df["Close"].values, df["Volume"].values.astype(float)),
+        index=df.index,
+    )
+
+
+def compute_stochastic(
+    df: pd.DataFrame, fastk_period: int = 14, slowk_period: int = 3, slowd_period: int = 3
+) -> dict:
+    slowk, slowd = talib.STOCH(
+        df["High"].values,
+        df["Low"].values,
+        df["Close"].values,
+        fastk_period=fastk_period,
+        slowk_period=slowk_period,
+        slowk_matype=0,
+        slowd_period=slowd_period,
+        slowd_matype=0,
+    )
+    return {
+        "slowk": pd.Series(slowk, index=df.index),
+        "slowd": pd.Series(slowd, index=df.index),
+    }
+
+
+def compute_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    return pd.Series(
+        talib.ATR(df["High"].values, df["Low"].values, df["Close"].values, timeperiod=period),
+        index=df.index,
+    )
+
+
+def compute_fibonacci_levels(df: pd.DataFrame, lookback: int = 60) -> dict:
+    recent = df.tail(lookback)
+    high = float(recent["High"].max())
+    low = float(recent["Low"].min())
+    diff = high - low
+
+    ratios = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0]
+    levels = {r: high - diff * r for r in ratios}
+
+    current_price = float(df["Close"].iloc[-1])
+    position = (high - current_price) / diff if diff > 0 else 0.5
+
+    return {
+        "high": high,
+        "low": low,
+        "levels": levels,
+        "current_position": max(0.0, min(1.0, position)),
+    }
+
+
 def compute_all(df: pd.DataFrame) -> dict:
     return {
         "rsi": compute_rsi(df),
         "macd": compute_macd(df),
         "ma": compute_moving_averages(df),
         "bb": compute_bollinger_bands(df),
+        "obv": compute_obv(df),
+        "stochastic": compute_stochastic(df),
+        "atr": compute_atr(df),
+        "fibonacci": compute_fibonacci_levels(df),
         "close": df["Close"],
+        "volume": df["Volume"],
     }

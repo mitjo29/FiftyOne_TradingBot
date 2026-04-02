@@ -8,10 +8,12 @@ TOOL_DEFINITIONS = [
     {
         "name": "analyze_stock",
         "description": (
-            "Run full technical analysis on a stock ticker. Returns RSI, MACD, "
-            "Moving Averages, Bollinger Bands indicators and an overall "
-            "buy/sell/hold signal with a score from -2 (strong sell) to +2 (strong buy). "
-            "Also generates a chart image."
+            "Run full technical analysis on a stock ticker. Uses 8 indicators "
+            "(RSI, MACD, Moving Averages, Bollinger Bands, OBV Volume, Stochastic, "
+            "News Sentiment, ML Price Prediction) to generate a buy/sell/hold signal "
+            "with a score from -2 (strong sell) to +2 (strong buy). "
+            "Includes ML-predicted probability of next-day price increase. "
+            "Also generates a 4-panel chart (Price+Fibonacci, RSI, Stochastic, Volume/OBV)."
         ),
         "input_schema": {
             "type": "object",

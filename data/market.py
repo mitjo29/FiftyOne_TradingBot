@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class MarketData:
     async def get_stock_data(
-        self, ticker: str, period: str = "3mo", interval: str = "1d"
+        self, ticker: str, period: str = "1y", interval: str = "1d"
     ) -> pd.DataFrame:
         def _fetch():
             data = yf.download(ticker, period=period, interval=interval, progress=False)

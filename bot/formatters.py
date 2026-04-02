@@ -18,16 +18,22 @@ def format_analysis(signal: SignalResult) -> str:
         f"Price: <b>${signal.current_price:.2f}</b>",
         "",
         f"Signal: {emoji} <b>{signal.overall_signal}</b> (Score: {signal.score:+.2f})",
-        "",
-        "<b>Indicator Breakdown:</b>",
     ]
+
+    if signal.ml_probability is not None:
+        ml_dir = "Up" if signal.ml_probability > 0.5 else "Down"
+        lines.append(f"ML Prediction: <b>{signal.ml_probability:.0%}</b> {ml_dir}")
+
+    lines.append("")
+    lines.append("<b>Indicator Breakdown:</b>")
 
     for key, data in signal.details.items():
         name = key.upper()
         score = data["score"]
         detail = data["detail"]
+        weight_pct = data.get("weight", 0) * 100
         bar = _score_bar(score)
-        lines.append(f"  {name}: {bar} {detail}")
+        lines.append(f"  {name} ({weight_pct:.0f}%): {bar} {detail}")
 
     lines.append("")
     lines.append(f"<i>Updated: {signal.timestamp.strftime('%Y-%m-%d %H:%M')}</i>")
