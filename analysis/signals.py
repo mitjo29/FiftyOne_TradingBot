@@ -5,6 +5,9 @@ import numpy as np
 import pandas as pd
 
 
+from analysis.recommendation import TradeRecommendation
+
+
 @dataclass
 class SignalResult:
     ticker: str
@@ -14,6 +17,7 @@ class SignalResult:
     details: dict
     timestamp: datetime
     ml_probability: float | None = None
+    recommendation: TradeRecommendation | None = None
 
 
 # Weights for each scored component (sum = 1.0)

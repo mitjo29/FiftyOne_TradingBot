@@ -47,6 +47,26 @@ class ToolExecutor:
         if signal.ml_probability is not None:
             text += f"ML Prediction: {signal.ml_probability:.0%} up probability\n"
         text += f"Indicators:\n" + "\n".join(details)
+
+        # Trade recommendation
+        rec = signal.recommendation
+        if rec and rec.action != "HOLD":
+            text += (
+                f"\n\nTrade Recommendation: {rec.action} ({rec.confidence} confidence)\n"
+                f"  Order: {rec.order_type}"
+            )
+            if rec.limit_price:
+                text += f" @ ${rec.limit_price:.2f}"
+            text += (
+                f"\n  Size: ${rec.position_size_usd:,.0f} ({rec.position_size_pct:.0f}% of portfolio)\n"
+                f"  Stop-loss: ${rec.stop_loss:.2f}\n"
+                f"  Target 1: ${rec.take_profit_1:.2f} (conservative)\n"
+                f"  Target 2: ${rec.take_profit_2:.2f} (aggressive)\n"
+                f"  Risk/Reward: {rec.risk_reward_ratio}:1"
+            )
+        elif rec:
+            text += f"\n\nRecommendation: HOLD — no trade at this time"
+
         return {"text": text, "chart": chart_buf}
 
     async def _tool_buy_stock(self, inputs: dict, user_id: int) -> dict:

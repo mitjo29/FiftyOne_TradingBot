@@ -1,4 +1,5 @@
 from analysis.signals import SignalResult
+from analysis.recommendation import TradeRecommendation
 from portfolio.models import PortfolioSummary, Trade
 
 
@@ -35,8 +36,60 @@ def format_analysis(signal: SignalResult) -> str:
         bar = _score_bar(score)
         lines.append(f"  {name} ({weight_pct:.0f}%): {bar} {detail}")
 
+    # Trade recommendation
+    if signal.recommendation:
+        lines.append("")
+        lines.append(_format_recommendation(signal.recommendation))
+
     lines.append("")
     lines.append(f"<i>Updated: {signal.timestamp.strftime('%Y-%m-%d %H:%M')}</i>")
+    return "\n".join(lines)
+
+
+def _format_recommendation(rec: TradeRecommendation) -> str:
+    """Format a trade recommendation for Telegram."""
+    if rec.action == "HOLD":
+        return (
+            "<b>Recommendation: HOLD</b>\n"
+            f"  No trade — signal is neutral\n"
+            f"  Watch support: ${rec.stop_loss:,.2f}\n"
+            f"  Watch resistance: ${rec.take_profit_1:,.2f}"
+        )
+
+    # Action header
+    action_emoji = "🟢 BUY" if rec.action == "BUY" else "🔴 SELL"
+    lines = [
+        f"<b>Trade Recommendation:</b>",
+        f"  {action_emoji} — {rec.confidence} confidence",
+        "",
+    ]
+
+    # Order details
+    lines.append(f"  <b>Order:</b> {rec.order_type}")
+    if rec.order_type == "Market":
+        lines.append(f"  Entry: ${rec.entry_price:,.2f} (at market)")
+    elif rec.order_type == "Limit":
+        lines.append(f"  Limit price: <b>${rec.limit_price:,.2f}</b>")
+    elif rec.order_type == "Stop-Limit":
+        lines.append(f"  Trigger: ${rec.entry_price:,.2f}")
+        lines.append(f"  Limit: <b>${rec.limit_price:,.2f}</b>")
+
+    # Position size
+    lines.append(f"  <b>Size:</b> ${rec.position_size_usd:,.0f} ({rec.position_size_pct:.0f}% of portfolio)")
+
+    # Stop-loss and take-profit
+    lines.append("")
+    lines.append(f"  🛑 Stop-loss: <b>${rec.stop_loss:,.2f}</b> (risk: ${rec.risk_per_share:.2f}/share)")
+    lines.append(f"  🎯 Target 1: <b>${rec.take_profit_1:,.2f}</b> (conservative)")
+    lines.append(f"  🎯 Target 2: <b>${rec.take_profit_2:,.2f}</b> (aggressive)")
+    lines.append(f"  ⚖️ Risk/Reward: <b>{rec.risk_reward_ratio}:1</b>")
+
+    # Notes
+    if rec.notes:
+        lines.append("")
+        for note in rec.notes:
+            lines.append(f"  ℹ️ {note}")
+
     return "\n".join(lines)
 
 
@@ -96,11 +149,19 @@ def format_watchlist(tickers: list[str]) -> str:
 
 def format_alert(signal: SignalResult) -> str:
     emoji = SIGNAL_EMOJI.get(signal.overall_signal, "")
-    return (
-        f"🔔 <b>Alert: {signal.ticker}</b>\n"
-        f"Signal: {emoji} {signal.overall_signal} (Score: {signal.score:+.2f})\n"
-        f"Price: ${signal.current_price:.2f}"
-    )
+    lines = [
+        f"🔔 <b>Alert: {signal.ticker}</b>",
+        f"Signal: {emoji} {signal.overall_signal} (Score: {signal.score:+.2f})",
+        f"Price: ${signal.current_price:.2f}",
+    ]
+    rec = signal.recommendation
+    if rec and rec.action != "HOLD":
+        lines.append("")
+        lines.append(f"<b>{rec.action}</b> — {rec.order_type}")
+        if rec.limit_price:
+            lines.append(f"Limit: ${rec.limit_price:,.2f}")
+        lines.append(f"Size: ${rec.position_size_usd:,.0f} | SL: ${rec.stop_loss:,.2f} | TP: ${rec.take_profit_1:,.2f}")
+    return "\n".join(lines)
 
 
 def format_overview(summary: PortfolioSummary, trades: list[dict], initial_cash: float) -> str:
