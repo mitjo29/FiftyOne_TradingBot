@@ -176,5 +176,11 @@ def format_help() -> str:
         "  /sell &lt;TICKER&gt; &lt;$AMOUNT&gt; - Paper sell\n\n"
         "<b>Settings:</b>\n"
         "  /alerts - Configure alert notifications\n"
-        "  /help - Show this message"
+        "  /clear - Reset AI conversation\n"
+        "  /help - Show this message\n\n"
+        "💬 <b>AI Chat:</b> Just type naturally!\n"
+        "  \"What do you think about Tesla?\"\n"
+        "  \"Buy $2000 of Apple\"\n"
+        "  \"How's my portfolio doing?\"\n"
+        "  \"Compare MSFT and GOOG\""
     )

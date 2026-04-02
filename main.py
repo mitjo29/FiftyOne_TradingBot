@@ -1,6 +1,12 @@
 import logging
 
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+)
 
 from bot.handlers import (
     start_handler,
@@ -16,9 +22,11 @@ from bot.handlers import (
     sell_handler,
     alerts_handler,
     alerts_callback_handler,
+    chat_handler,
+    clear_handler,
     error_handler,
 )
-from config import TELEGRAM_BOT_TOKEN, LOG_LEVEL, SCAN_INTERVAL_MINUTES
+from config import TELEGRAM_BOT_TOKEN, ANTHROPIC_API_KEY, LOG_LEVEL, SCAN_INTERVAL_MINUTES
 from data.market import MarketData
 from portfolio.manager import PortfolioManager
 from scheduler.jobs import scan_watchlists, record_portfolio_snapshots
@@ -47,6 +55,18 @@ def main():
     app.bot_data["market"] = market
     app.bot_data["portfolio"] = portfolio_mgr
 
+    # Initialize AI agent if API key is set
+    if ANTHROPIC_API_KEY:
+        from agent.executor import ToolExecutor
+        from agent.brain import AgentBrain
+
+        tool_executor = ToolExecutor(db, market, portfolio_mgr)
+        agent_brain = AgentBrain(tool_executor)
+        app.bot_data["agent"] = agent_brain
+        logger.info("AI agent initialized with Claude")
+    else:
+        logger.warning("ANTHROPIC_API_KEY not set — AI chat disabled, slash commands still work")
+
     # Register command handlers
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(CommandHandler("help", help_handler))
@@ -60,7 +80,12 @@ def main():
     app.add_handler(CommandHandler("buy", buy_handler))
     app.add_handler(CommandHandler("sell", sell_handler))
     app.add_handler(CommandHandler("alerts", alerts_handler))
+    app.add_handler(CommandHandler("clear", clear_handler))
     app.add_handler(CallbackQueryHandler(alerts_callback_handler))
+
+    # AI chat handler — catches all non-command text messages (must be last)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
+
     app.add_error_handler(error_handler)
 
     # Post-init: setup DB and scheduler

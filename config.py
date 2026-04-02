@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 VIRTUAL_CASH = float(os.getenv("VIRTUAL_CASH", "100000.00"))
 SCAN_INTERVAL_MINUTES = int(os.getenv("SCAN_INTERVAL_MINUTES", "60"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

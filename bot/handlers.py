@@ -35,11 +35,19 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db: Database = context.bot_data["db"]
     await db.ensure_user(update.effective_chat.id)
 
+    has_agent = "agent" in context.bot_data
+    ai_note = (
+        "\n\n💬 <b>Just chat with me naturally!</b>\n"
+        "Try: \"What do you think about Tesla?\" or \"Buy $1000 of Apple\""
+        if has_agent
+        else ""
+    )
+
     await update.message.reply_text(
         "Welcome to <b>FiftyOne Trading Bot</b>! 📊\n\n"
         "I analyze stocks using technical indicators (RSI, MACD, Moving Averages, "
         "Bollinger Bands) and give you buy/sell/hold signals.\n\n"
-        "Get started with /analyze AAPL or type /help for all commands.",
+        f"Get started with /analyze AAPL or type /help for all commands.{ai_note}",
         parse_mode=ParseMode.HTML,
     )
 
@@ -303,6 +311,62 @@ async def alerts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     elif query.data == "threshold_all":
         await db.update_alert_settings(user_id, settings["enabled"], "all")
         await query.edit_message_text("Threshold set to <b>all signals</b>.", parse_mode=ParseMode.HTML)
+
+
+async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle free-text messages via the AI agent."""
+    db: Database = context.bot_data["db"]
+    user_id = update.effective_chat.id
+    await db.ensure_user(user_id)
+
+    agent_brain = context.bot_data.get("agent")
+    if not agent_brain:
+        await update.message.reply_text(
+            "AI agent is not configured. Set ANTHROPIC_API_KEY in your .env file.\n"
+            "You can still use slash commands — type /help to see them."
+        )
+        return
+
+    user_text = update.message.text
+    if not user_text:
+        return
+
+    # Show typing indicator
+    await context.bot.send_chat_action(chat_id=user_id, action="typing")
+
+    try:
+        result = await agent_brain.chat(user_id, user_text)
+
+        # Send any charts first
+        for chart_buf in result.get("charts", []):
+            await update.message.reply_photo(photo=chart_buf)
+
+        # Send text response
+        text = result.get("text", "")
+        if text:
+            # Split long messages for Telegram's 4096 char limit
+            while len(text) > 4000:
+                split_at = text.rfind("\n", 0, 4000)
+                if split_at == -1:
+                    split_at = 4000
+                await update.message.reply_text(text[:split_at])
+                text = text[split_at:].lstrip()
+            if text:
+                await update.message.reply_text(text)
+
+    except Exception:
+        logger.exception("Error in AI agent chat")
+        await update.message.reply_text(
+            "Sorry, I had trouble processing that. Try again or use /help for commands."
+        )
+
+
+async def clear_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Clear the AI conversation history for this user."""
+    agent_brain = context.bot_data.get("agent")
+    if agent_brain:
+        agent_brain.clear_history(update.effective_chat.id)
+    await update.message.reply_text("Conversation cleared. Let's start fresh!")
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
