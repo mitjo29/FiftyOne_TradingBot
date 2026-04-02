@@ -6,3 +6,4 @@ matplotlib>=3.7
 python-dotenv>=1.0
 aiosqlite>=0.19
 anthropic>=0.40.0
+mcp[cli]>=1.0.0
